@@ -18,3 +18,8 @@ funds check, and both commit — a classic check-then-act race.
 throughput limit for one hot wallet. A single global lock order means two transactions touching
 the same accounts cannot deadlock each other. The stored balance can be verified against
 `SUM(postings)` in tests.
+
+**Only wallets have a balance row.** Platform accounts (`external_funding`, `supplier_payable`,
+`fx_pool`) take part in every transaction in their currency. Locking a balance row for them
+would make every top-up or payment in that currency, across all tenants, wait for one row. They
+never need a funds check, so their balance is derived from `SUM(postings)` when needed.

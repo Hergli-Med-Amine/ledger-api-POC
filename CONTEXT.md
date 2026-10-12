@@ -17,8 +17,9 @@ that record it and is written atomically: all of its postings exist or none do.
 transaction. Positive increases the account's balance, negative decreases it. For every
 transaction and every currency, its postings sum to zero.
 
-**Balance** — the current total of an account's postings, stored in `balances` and updated in the
-same database transaction as the postings that change it.
+**Balance** — the current total of an account's postings. For wallets it is stored in `balances`
+and updated in the same database transaction as the postings that change it; platform accounts
+have no stored balance (see ADR 2).
 
 **Minor units** — the smallest unit of a currency as an integer: cents for EUR (exponent 2), yen
 for JPY (exponent 0). All amounts are stored and computed this way.
