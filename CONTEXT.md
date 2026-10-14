@@ -27,6 +27,11 @@ for JPY (exponent 0). All amounts are stored and computed this way.
 **Quote** — a fixed FX rate from one currency to another, offered to a tenant with a short expiry.
 A conversion must reference an unexpired, unused quote, and using it marks it used.
 
+**API key** — the credential a tenant's system sends as `Authorization: Bearer lk_…`. Belongs to
+one tenant, carries scopes (`read`, `write`), stored only as a hash, can be revoked.
+
+**Statement** — a wallet's postings, newest first, paginated with an opaque cursor.
+
 **Idempotency key** — a client-chosen string sent in the `Idempotency-Key` header on a write.
 Scoped to the tenant. The first request with a key does the work; a retry with the same key and
 same body gets the stored response back instead of moving money twice.

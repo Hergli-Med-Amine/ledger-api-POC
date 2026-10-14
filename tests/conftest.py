@@ -10,6 +10,8 @@ from alembic.config import Config
 from sqlalchemy import Engine, create_engine, text
 from testcontainers.community.postgres import PostgresContainer
 
+from ledger_api import admin
+
 POSTGRES_IMAGE = "postgres:18.6-alpine"
 ALEMBIC_INI = Path(__file__).parents[1] / "alembic.ini"
 
@@ -29,7 +31,9 @@ def engine() -> Iterator[Engine]:
 def reset_db(engine: Engine) -> Callable[[], None]:
     def reset() -> None:
         with engine.begin() as conn:
-            conn.execute(text("TRUNCATE tenants, accounts, transactions, postings, balances"))
+            conn.execute(
+                text("TRUNCATE tenants, api_keys, accounts, transactions, postings, balances")
+            )
 
     return reset
 
@@ -44,10 +48,7 @@ def db(engine: Engine, reset_db: Callable[[], None]) -> Engine:
 def create_tenant(engine: Engine) -> Callable[[str], UUID]:
     def create(name: str) -> UUID:
         with engine.begin() as conn:
-            tenant_id: UUID = conn.execute(
-                text("INSERT INTO tenants (name) VALUES (:name) RETURNING id"), {"name": name}
-            ).scalar_one()
-        return tenant_id
+            return admin.create_tenant(conn, name)
 
     return create
 
