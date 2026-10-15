@@ -11,6 +11,7 @@ from sqlalchemy import Engine, create_engine, text
 from testcontainers.community.postgres import PostgresContainer
 
 from ledger_api import admin
+from ledger_api.api.auth import issue_api_key
 
 POSTGRES_IMAGE = "postgres:18.6-alpine"
 ALEMBIC_INI = Path(__file__).parents[1] / "alembic.ini"
@@ -31,9 +32,8 @@ def engine() -> Iterator[Engine]:
 def reset_db(engine: Engine) -> Callable[[], None]:
     def reset() -> None:
         with engine.begin() as conn:
-            conn.execute(
-                text("TRUNCATE tenants, api_keys, accounts, transactions, postings, balances")
-            )
+            # CASCADE empties every table that references these, including ones added later.
+            conn.execute(text("TRUNCATE tenants, accounts CASCADE"))
 
     return reset
 
@@ -83,3 +83,13 @@ def ledger_violations(engine: Engine) -> Callable[[], list[str]]:
         )
 
     return check
+
+
+@pytest.fixture
+def auth_headers(db: Engine) -> Callable[..., dict[str, str]]:
+    def headers(tenant_id: UUID, scopes: tuple[str, ...] = ("read", "write")) -> dict[str, str]:
+        with db.begin() as conn:
+            key = issue_api_key(conn, tenant_id, scopes)
+        return {"Authorization": f"Bearer {key}"}
+
+    return headers

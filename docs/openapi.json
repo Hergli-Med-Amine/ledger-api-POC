@@ -6,135 +6,40 @@
   },
   "paths": {
     "/v1/wallets": {
-      "get": {
-        "tags": [
-          "wallets"
-        ],
-        "summary": "List Wallets",
-        "operationId": "list_wallets_v1_wallets_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WalletListResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "examples": [
-                        "/problems/insufficient-funds"
-                      ]
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Detail"
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status"
-                  ],
-                  "title": "Problem",
-                  "description": "RFC 9457 problem details, returned for every error."
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "examples": [
-                        "/problems/insufficient-funds"
-                      ]
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Detail"
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status"
-                  ],
-                  "title": "Problem",
-                  "description": "RFC 9457 problem details, returned for every error."
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
       "post": {
         "tags": [
           "wallets"
         ],
         "summary": "Open Wallet",
         "operationId": "open_wallet_v1_wallets_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OpenWalletRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -152,21 +57,22 @@
             "content": {
               "application/problem+json": {
                 "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "title": "Type",
                       "examples": [
                         "/problems/insufficient-funds"
-                      ]
+                      ],
+                      "title": "Type",
+                      "type": "string"
                     },
                     "title": {
-                      "type": "string",
-                      "title": "Title"
+                      "title": "Title",
+                      "type": "string"
                     },
                     "status": {
-                      "type": "integer",
-                      "title": "Status"
+                      "title": "Status",
+                      "type": "integer"
                     },
                     "detail": {
                       "anyOf": [
@@ -180,14 +86,13 @@
                       "title": "Detail"
                     }
                   },
-                  "type": "object",
                   "required": [
                     "type",
                     "title",
                     "status"
                   ],
                   "title": "Problem",
-                  "description": "RFC 9457 problem details, returned for every error."
+                  "type": "object"
                 }
               }
             }
@@ -197,21 +102,22 @@
             "content": {
               "application/problem+json": {
                 "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "title": "Type",
                       "examples": [
                         "/problems/insufficient-funds"
-                      ]
+                      ],
+                      "title": "Type",
+                      "type": "string"
                     },
                     "title": {
-                      "type": "string",
-                      "title": "Title"
+                      "title": "Title",
+                      "type": "string"
                     },
                     "status": {
-                      "type": "integer",
-                      "title": "Status"
+                      "title": "Status",
+                      "type": "integer"
                     },
                     "detail": {
                       "anyOf": [
@@ -225,14 +131,13 @@
                       "title": "Detail"
                     }
                   },
-                  "type": "object",
                   "required": [
                     "type",
                     "title",
                     "status"
                   ],
                   "title": "Problem",
-                  "description": "RFC 9457 problem details, returned for every error."
+                  "type": "object"
                 }
               }
             }
@@ -242,21 +147,22 @@
             "content": {
               "application/problem+json": {
                 "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "title": "Type",
                       "examples": [
                         "/problems/insufficient-funds"
-                      ]
+                      ],
+                      "title": "Type",
+                      "type": "string"
                     },
                     "title": {
-                      "type": "string",
-                      "title": "Title"
+                      "title": "Title",
+                      "type": "string"
                     },
                     "status": {
-                      "type": "integer",
-                      "title": "Status"
+                      "title": "Status",
+                      "type": "integer"
                     },
                     "detail": {
                       "anyOf": [
@@ -270,14 +176,13 @@
                       "title": "Detail"
                     }
                   },
-                  "type": "object",
                   "required": [
                     "type",
                     "title",
                     "status"
                   ],
                   "title": "Problem",
-                  "description": "RFC 9457 problem details, returned for every error."
+                  "type": "object"
                 }
               }
             }
@@ -287,21 +192,22 @@
             "content": {
               "application/problem+json": {
                 "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "title": "Type",
                       "examples": [
                         "/problems/insufficient-funds"
-                      ]
+                      ],
+                      "title": "Type",
+                      "type": "string"
                     },
                     "title": {
-                      "type": "string",
-                      "title": "Title"
+                      "title": "Title",
+                      "type": "string"
                     },
                     "status": {
-                      "type": "integer",
-                      "title": "Status"
+                      "title": "Status",
+                      "type": "integer"
                     },
                     "detail": {
                       "anyOf": [
@@ -315,24 +221,132 @@
                       "title": "Detail"
                     }
                   },
-                  "type": "object",
                   "required": [
                     "type",
                     "title",
                     "status"
                   ],
                   "title": "Problem",
-                  "description": "RFC 9457 problem details, returned for every error."
+                  "type": "object"
                 }
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "wallets"
+        ],
+        "summary": "List Wallets",
+        "operationId": "list_wallets_v1_wallets_get",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
+                  "properties": {
+                    "type": {
+                      "examples": [
+                        "/problems/insufficient-funds"
+                      ],
+                      "title": "Type",
+                      "type": "string"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Detail"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "title": "Problem",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
+                  "properties": {
+                    "type": {
+                      "examples": [
+                        "/problems/insufficient-funds"
+                      ],
+                      "title": "Type",
+                      "type": "string"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Detail"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "title": "Problem",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/wallets/{wallet_id}": {
@@ -575,6 +589,18 @@
               "format": "uuid",
               "title": "Wallet Id"
             }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$",
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
@@ -690,6 +716,51 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
+                  "properties": {
+                    "type": {
+                      "examples": [
+                        "/problems/insufficient-funds"
+                      ],
+                      "title": "Type",
+                      "type": "string"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Detail"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "title": "Problem",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -803,6 +874,18 @@
               "format": "uuid",
               "title": "Wallet Id"
             }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$",
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
@@ -918,6 +1001,51 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "description": "RFC 9457 problem details, returned for every error.",
+                  "properties": {
+                    "type": {
+                      "examples": [
+                        "/problems/insufficient-funds"
+                      ],
+                      "title": "Type",
+                      "type": "string"
+                    },
+                    "title": {
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "Status",
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Detail"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "title": "Problem",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/problem+json": {
                 "schema": {

@@ -34,7 +34,8 @@ one tenant, carries scopes (`read`, `write`), stored only as a hash, can be revo
 
 **Idempotency key** — a client-chosen string sent in the `Idempotency-Key` header on a write.
 Scoped to the tenant. The first request with a key does the work; a retry with the same key and
-same body gets the stored response back instead of moving money twice.
+same body gets the stored response back instead of moving money twice. A request that failed
+moved no money and is not recorded, so retrying it runs it again.
 
 **Outbox** — a table of events written in the same transaction as the money movement they
 describe. A separate worker reads it and delivers signed webhooks, so an event exists if and only
