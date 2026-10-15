@@ -76,7 +76,7 @@ def test_another_tenants_wallet_is_not_found(
 
 
 def test_one_wallet_per_tenant_per_currency(db: Engine, tenant: UUID, eur_wallet: UUID) -> None:
-    with pytest.raises(IntegrityError), db.begin() as conn:
+    with pytest.raises(ledger.WalletAlreadyExists), db.begin() as conn:
         ledger.open_wallet(conn, tenant, "EUR")
 
 
