@@ -24,6 +24,13 @@ have no stored balance (see ADR 2).
 **Minor units** — the smallest unit of a currency as an integer: cents for EUR (exponent 2), yen
 for JPY (exponent 0). All amounts are stored and computed this way.
 
+**Refund** — a transaction that returns part or all of a payment to the wallet it came from. All
+refunds of one payment together never exceed it.
+
+**Conversion** — a transaction that sells an amount of one currency from a tenant's wallet and
+credits the tenant's wallet in another currency, at a quote's rate. The platform's `fx_pool`
+account is the counterparty in both currencies.
+
 **Quote** — a fixed FX rate from one currency to another, offered to a tenant with a short expiry.
 A conversion must reference an unexpired, unused quote, and using it marks it used.
 

@@ -3,7 +3,7 @@
 A multi-currency wallet and double-entry ledger service for B2B commerce: top-ups, invoice
 payments, refunds and FX conversion, with idempotent writes and signed webhooks.
 
-Work in progress — currently at milestone 4 (idempotency and concurrency).
+Work in progress — currently at milestone 5 (refunds and FX).
 
 ## Run locally
 
@@ -47,6 +47,14 @@ A test fails if it drifts from the code.
 | `POST` | `/v1/wallets/{id}/top-ups` | write |
 | `POST` | `/v1/wallets/{id}/payments` | write |
 | `GET` | `/v1/wallets/{id}/statement?limit=&cursor=` | read |
+| `POST` | `/v1/wallets/{id}/payments/{payment_id}/refunds` | write |
+| `POST` | `/v1/fx/quotes` | write |
+| `POST` | `/v1/fx/conversions` | write |
+
+Refunds can be partial; together they never exceed the original payment. An FX quote fixes a rate
+from a static table for 60 seconds and backs exactly one conversion between the tenant's two
+wallets; the bought amount is rounded half-even to the currency's minor unit
+([ADR 1](docs/adr/0001-money-as-integer-minor-units.md)).
 
 Every `POST` requires an `Idempotency-Key` header (any printable ASCII, up to 255 characters).
 Retrying with the same key and body returns the original response with
@@ -73,6 +81,10 @@ uv run pytest
 
 ## Limitations
 
+- FX rates are a static, fictional table (`src/ledger_api/fx_rates.json`), not a live feed.
+- A payment's `reference` (e.g. an invoice number) is not unique: a client that retries with a
+  *new* idempotency key can pay the same invoice twice. A unique index on
+  `(tenant_id, reference)` for payments would catch that server-side.
 - Idempotency keys are kept forever; a production system would expire them (e.g. after 24 h).
 
 - Statements are ordered by posting id (UUIDv7, time of creation), not commit time. A transaction

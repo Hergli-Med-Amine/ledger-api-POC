@@ -1,27 +1,41 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 from uuid import UUID
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from sqlalchemy import Engine
 
-from ledger_api import ledger
-from ledger_api.money import Money
+from ledger_api import fx, ledger
+from ledger_api.money import Money, convert
 
 # Two tenants and two currencies, so platform accounts are shared across tenants
-# and a currency with no minor unit (JPY) is exercised.
+# and a currency with no minor unit (JPY) is exercised. Conversions run between
+# tenant-a's EUR and JPY wallets.
 WALLETS = [("tenant-a", "EUR"), ("tenant-a", "JPY"), ("tenant-b", "EUR")]
+EUR_A, JPY_A = 0, 1
+STARTING_BALANCE = 20_000
 
 operations = st.lists(
     st.tuples(
-        # "pay_all" pays the wallet's exact balance: random amounts almost never hit
-        # that boundary, and an off-by-one in the funds check hides there.
-        st.sampled_from(["top_up", "pay", "pay_all"]),
-        st.integers(min_value=0, max_value=len(WALLETS) - 1),
+        # "pay_all" and "refund_rest" hit the exact boundaries (whole balance, whole remaining
+        # refund) that random amounts almost never reach, where off-by-one errors hide.
+        st.sampled_from(
+            ["top_up", "pay", "pay_all", "refund", "refund_rest", "eur_to_jpy", "jpy_to_eur"]
+        ),
+        st.integers(min_value=0, max_value=20),
         st.integers(min_value=1, max_value=10_000),
     ),
-    max_size=30,
+    max_size=40,
 )
+
+
+@dataclass
+class Payment:
+    wallet: int
+    id: UUID
+    paid: int
+    refunded: int = 0
 
 
 @settings(max_examples=100, deadline=None)
@@ -40,25 +54,71 @@ def test_random_operations_keep_the_ledger_consistent(
             (tenants[name], ledger.open_wallet(conn, tenants[name], currency), currency)
             for name, currency in WALLETS
         ]
-    expected = [0] * len(wallets)
+        # Funded up front so payments mostly succeed and refunds have payments to work on;
+        # "pay_all" still drives wallets to exactly zero.
+        for tenant_id, wallet_id, currency in wallets:
+            ledger.top_up(conn, tenant_id, wallet_id, Money(STARTING_BALANCE, currency))
+    # A simple model of what every balance should be, checked against the database at the end.
+    expected = [STARTING_BALANCE] * len(wallets)
+    payments: list[Payment] = []
 
     for op, index, amount_minor in ops:
-        tenant_id, wallet_id, currency = wallets[index]
-        if op == "pay_all":
-            op, amount_minor = "pay", max(expected[index], 1)
-        amount = Money(amount_minor, currency)
-        try:
+        if op in ("top_up", "pay", "pay_all"):
+            w = index % len(wallets)
+            tenant_id, wallet_id, currency = wallets[w]
+            if op == "pay_all":
+                op, amount_minor = "pay", max(expected[w], 1)
+            amount = Money(amount_minor, currency)
+            try:
+                with engine.begin() as conn:
+                    if op == "top_up":
+                        ledger.top_up(conn, tenant_id, wallet_id, amount)
+                    else:
+                        payment_id = ledger.pay(conn, tenant_id, wallet_id, amount)
+            except ledger.InsufficientFunds:
+                # Rejected exactly when the wallet could not cover it.
+                assert op == "pay"
+                assert expected[w] < amount_minor
+            else:
+                if op == "pay":
+                    assert expected[w] >= amount_minor
+                    payments.append(Payment(w, payment_id, amount_minor))
+                expected[w] += amount_minor if op == "top_up" else -amount_minor
+
+        elif op in ("refund", "refund_rest") and payments:
+            payment = payments[index % len(payments)]
+            tenant_id, wallet_id, currency = wallets[payment.wallet]
+            if op == "refund_rest":
+                amount_minor = max(payment.paid - payment.refunded, 1)
+            try:
+                with engine.begin() as conn:
+                    ledger.refund(
+                        conn, tenant_id, wallet_id, payment.id, Money(amount_minor, currency)
+                    )
+            except ledger.RefundExceedsPayment:
+                assert payment.refunded + amount_minor > payment.paid
+            else:
+                assert payment.refunded + amount_minor <= payment.paid
+                payment.refunded += amount_minor
+                expected[payment.wallet] += amount_minor
+
+        elif op in ("eur_to_jpy", "jpy_to_eur"):
+            sell, buy = (EUR_A, JPY_A) if op == "eur_to_jpy" else (JPY_A, EUR_A)
+            tenant_id = wallets[sell][0]
             with engine.begin() as conn:
-                if op == "top_up":
-                    ledger.top_up(conn, tenant_id, wallet_id, amount)
-                else:
-                    ledger.pay(conn, tenant_id, wallet_id, amount)
-        except ledger.InsufficientFunds:
-            # Rejected exactly when the wallet could not cover it.
-            assert op == "pay"
-            assert expected[index] < amount_minor
-        else:
-            expected[index] += amount_minor if op == "top_up" else -amount_minor
+                quote = fx.create_quote(conn, tenant_id, wallets[sell][2], wallets[buy][2])
+            bought = convert(Money(amount_minor, wallets[sell][2]), wallets[buy][2], quote.rate)
+            try:
+                with engine.begin() as conn:
+                    ledger.convert_currency(conn, tenant_id, quote.id, amount_minor)
+            except ledger.ConversionRoundsToZero:
+                assert bought.amount_minor == 0
+            except ledger.InsufficientFunds:
+                assert expected[sell] < amount_minor
+            else:
+                assert expected[sell] >= amount_minor
+                expected[sell] -= amount_minor
+                expected[buy] += bought.amount_minor
 
     with engine.connect() as conn:
         actual = [ledger.get_balance(conn, t, w).amount_minor for t, w, _ in wallets]

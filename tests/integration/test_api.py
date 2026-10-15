@@ -228,3 +228,51 @@ def test_unexpected_errors_hide_internals(client: TestClient, headers: Headers) 
 
     assert_problem(response, 500, "about:blank")
     assert "password" not in response.text
+
+
+def test_refund(client: TestClient, headers: Headers, wallet_id: str) -> None:
+    top_up(client, headers, wallet_id, 10_00)
+    payment = client.post(
+        f"/v1/wallets/{wallet_id}/payments",
+        json={"amount_minor": 6_00, "currency": "EUR"},
+        headers=headers,
+    ).json()
+    url = f"/v1/wallets/{wallet_id}/payments/{payment['transaction_id']}/refunds"
+
+    refunded = client.post(url, json={"amount_minor": 4_00, "currency": "EUR"}, headers=headers)
+    assert refunded.status_code == 201
+    assert refunded.json()["kind"] == "refund"
+    assert refunded.json()["balance_minor"] == 8_00
+
+    too_much = client.post(url, json={"amount_minor": 2_01, "currency": "EUR"}, headers=headers)
+    assert_problem(too_much, 422, "/problems/refund-exceeds-payment")
+
+
+def test_fx_quote_and_conversion(client: TestClient, headers: Headers, wallet_id: str) -> None:
+    top_up(client, headers, wallet_id, 10_00)
+    client.post("/v1/wallets", json={"currency": "USD"}, headers=headers)
+
+    quote = client.post(
+        "/v1/fx/quotes",
+        json={"from_currency": "EUR", "to_currency": "USD"},
+        headers=headers,
+    )
+    assert quote.status_code == 201
+    # Decimal rates travel as strings, so no client parses them into a float.
+    assert quote.json()["rate"] == "1.0850"
+
+    conversion = client.post(
+        "/v1/fx/conversions",
+        json={"quote_id": quote.json()["id"], "sell_amount_minor": 10_00},
+        headers=headers,
+    )
+    assert conversion.status_code == 201
+    assert conversion.json()["bought_amount_minor"] == 10_85
+    assert conversion.json()["bought_currency"] == "USD"
+
+    again = client.post(
+        "/v1/fx/conversions",
+        json={"quote_id": quote.json()["id"], "sell_amount_minor": 1},
+        headers=headers,
+    )
+    assert_problem(again, 409, "/problems/quote-already-used")

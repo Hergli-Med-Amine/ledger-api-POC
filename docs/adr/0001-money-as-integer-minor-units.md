@@ -16,3 +16,9 @@ every transaction still sums to zero per currency.
 Banker's rounding avoids a systematic upward bias across many conversions. Display formatting is
 the client's job. `bigint` caps an account at about 9.2 × 10^18 minor units, far above any
 realistic balance.
+
+**How the residue is booked.** Postings must balance per currency, and a conversion has two:
+the seller's wallet pays `fx_pool` in the sold currency, and `fx_pool` pays the buyer's wallet the
+*rounded* amount in the bought currency. The sub-minor-unit difference between the exact and the
+rounded amount therefore stays with `fx_pool`, and both currencies balance exactly. The quote's
+rate is kept on the transaction (`quote_id`), so the exact amount can always be recomputed.
