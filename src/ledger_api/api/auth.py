@@ -10,6 +10,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import Connection, text
 
+from ledger_api import log
 from ledger_api.api.database import EngineDep
 
 SCOPES = frozenset({"read", "write"})
@@ -87,7 +88,9 @@ def _current_principal(
     if credentials is None:
         raise Unauthenticated
     with engine.connect() as conn:
-        return authenticate(conn, credentials.credentials)
+        principal = authenticate(conn, credentials.credentials)
+    log.set_tenant(principal.tenant_id)
+    return principal
 
 
 def _require_read(principal: Annotated[Principal, Depends(_current_principal)]) -> Principal:

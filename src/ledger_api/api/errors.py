@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from ledger_api import ledger
+from ledger_api import idempotency, ledger
 from ledger_api.api.auth import MissingScope, Unauthenticated
 from ledger_api.money import UnknownCurrency
 
@@ -24,6 +24,16 @@ PROBLEMS: dict[type[Exception], tuple[int, str, str]] = {
     ledger.WalletNotFound: (404, "wallet-not-found", "Wallet not found"),
     ledger.WalletAlreadyExists: (409, "wallet-exists", "Wallet already exists for this currency"),
     InvalidCursor: (400, "invalid-cursor", "Invalid pagination cursor"),
+    idempotency.KeyInFlight: (
+        409,
+        "idempotency-key-in-flight",
+        "A request with this Idempotency-Key is still being processed",
+    ),
+    idempotency.KeyReused: (
+        422,
+        "idempotency-key-reused",
+        "Idempotency-Key was already used for a different request",
+    ),
     UnknownCurrency: (422, "unknown-currency", "Unknown currency"),
     ledger.CurrencyMismatch: (422, "currency-mismatch", "Amount currency differs from wallet's"),
     ledger.NonPositiveAmount: (422, "non-positive-amount", "Amount must be positive"),
@@ -55,7 +65,6 @@ def install(app: FastAPI) -> None:
         app.add_exception_handler(exc_type, _domain_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(HTTPException, _http_error)
-    app.add_exception_handler(Exception, _unexpected_error)
 
 
 async def _domain_error(request: Request, exc: Exception) -> JSONResponse:
@@ -73,8 +82,3 @@ async def _http_error(request: Request, exc: Exception) -> JSONResponse:
     # Framework errors such as an unknown route (404) or wrong method (405).
     assert isinstance(exc, HTTPException)
     return problem(exc.status_code, HTTPStatus(exc.status_code).phrase, headers=exc.headers)
-
-
-async def _unexpected_error(request: Request, exc: Exception) -> JSONResponse:
-    # The traceback goes to the server log; the client learns nothing about internals.
-    return problem(500, "Internal Server Error")

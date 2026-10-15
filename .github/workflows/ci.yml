@@ -1,9 +1,12 @@
 name: CI
 
+# docs/openapi.json is not ignored: a test checks it against the code.
 on:
   push:
     branches: [main, develop]
+    paths-ignore: ["**.md", "docs/adr/**"]
   pull_request:
+    paths-ignore: ["**.md", "docs/adr/**"]
 
 permissions:
   contents: read
