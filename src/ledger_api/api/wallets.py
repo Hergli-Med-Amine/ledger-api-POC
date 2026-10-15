@@ -3,10 +3,11 @@ import binascii
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import Connection
 
-from ledger_api import idempotency, ledger
+from ledger_api import ledger
 from ledger_api.api.auth import Reader, Writer
 from ledger_api.api.database import EngineDep
 from ledger_api.api.errors import InvalidCursor
@@ -20,20 +21,14 @@ from ledger_api.api.schemas import (
     WalletResponse,
     problem_responses,
 )
-from ledger_api.idempotency import StoredResponse
+from ledger_api.api.writes import IdempotencyKey, idempotent_write
 from ledger_api.money import Money
 
 router = APIRouter(prefix="/v1/wallets", tags=["wallets"], responses=problem_responses(401, 403))
 
-# Printable ASCII only, so a key can be stored, compared and logged without surprises.
-IdempotencyKey = Annotated[str, Header(min_length=1, max_length=255, pattern=r"^[\x21-\x7e]+$")]
-
 
 @router.post(
-    "",
-    status_code=201,
-    response_model=WalletResponse,
-    responses=problem_responses(409, 422),
+    "", status_code=201, response_model=WalletResponse, responses=problem_responses(409, 422)
 )
 def open_wallet(
     body: OpenWalletRequest,
@@ -42,17 +37,11 @@ def open_wallet(
     request: Request,
     idempotency_key: IdempotencyKey,
 ) -> WalletResponse | JSONResponse:
-    request_hash = idempotency.fingerprint("POST", request.url.path, body.model_dump(mode="json"))
-    with engine.begin() as conn:
-        stored = idempotency.begin(conn, principal.tenant_id, idempotency_key, request_hash)
-        if stored is not None:
-            return _replay(stored)
+    def work(conn: Connection) -> WalletResponse:
         wallet_id = ledger.open_wallet(conn, principal.tenant_id, body.currency)
-        response = WalletResponse(id=wallet_id, currency=body.currency, balance_minor=0)
-        idempotency.record(
-            conn, principal.tenant_id, idempotency_key, request_hash, _stored(201, response)
-        )
-    return response
+        return WalletResponse(id=wallet_id, currency=body.currency, balance_minor=0)
+
+    return idempotent_write(engine, request, principal, idempotency_key, body, work)
 
 
 @router.get("")
@@ -83,19 +72,14 @@ def top_up(
     request: Request,
     idempotency_key: IdempotencyKey,
 ) -> MovementResponse | JSONResponse:
-    amount = Money(body.amount_minor, body.currency)
-    request_hash = idempotency.fingerprint("POST", request.url.path, body.model_dump(mode="json"))
-    with engine.begin() as conn:
-        stored = idempotency.begin(conn, principal.tenant_id, idempotency_key, request_hash)
-        if stored is not None:
-            return _replay(stored)
+    def work(conn: Connection) -> MovementResponse:
+        amount = Money(body.amount_minor, body.currency)
         transaction_id = ledger.top_up(conn, principal.tenant_id, wallet_id, amount, body.reference)
-        balance = ledger.get_balance(conn, principal.tenant_id, wallet_id)
-        response = _movement_response(transaction_id, "top_up", body, balance)
-        idempotency.record(
-            conn, principal.tenant_id, idempotency_key, request_hash, _stored(201, response)
+        return _movement_response(
+            conn, principal.tenant_id, wallet_id, transaction_id, "top_up", body
         )
-    return response
+
+    return idempotent_write(engine, request, principal, idempotency_key, body, work)
 
 
 @router.post(
@@ -112,19 +96,41 @@ def pay(
     request: Request,
     idempotency_key: IdempotencyKey,
 ) -> MovementResponse | JSONResponse:
-    amount = Money(body.amount_minor, body.currency)
-    request_hash = idempotency.fingerprint("POST", request.url.path, body.model_dump(mode="json"))
-    with engine.begin() as conn:
-        stored = idempotency.begin(conn, principal.tenant_id, idempotency_key, request_hash)
-        if stored is not None:
-            return _replay(stored)
+    def work(conn: Connection) -> MovementResponse:
+        amount = Money(body.amount_minor, body.currency)
         transaction_id = ledger.pay(conn, principal.tenant_id, wallet_id, amount, body.reference)
-        balance = ledger.get_balance(conn, principal.tenant_id, wallet_id)
-        response = _movement_response(transaction_id, "payment", body, balance)
-        idempotency.record(
-            conn, principal.tenant_id, idempotency_key, request_hash, _stored(201, response)
+        return _movement_response(
+            conn, principal.tenant_id, wallet_id, transaction_id, "payment", body
         )
-    return response
+
+    return idempotent_write(engine, request, principal, idempotency_key, body, work)
+
+
+@router.post(
+    "/{wallet_id}/payments/{payment_id}/refunds",
+    status_code=201,
+    response_model=MovementResponse,
+    responses=problem_responses(404, 409, 422),
+)
+def refund(
+    wallet_id: UUID,
+    payment_id: UUID,
+    body: MovementRequest,
+    principal: Writer,
+    engine: EngineDep,
+    request: Request,
+    idempotency_key: IdempotencyKey,
+) -> MovementResponse | JSONResponse:
+    def work(conn: Connection) -> MovementResponse:
+        amount = Money(body.amount_minor, body.currency)
+        transaction_id = ledger.refund(
+            conn, principal.tenant_id, wallet_id, payment_id, amount, body.reference
+        )
+        return _movement_response(
+            conn, principal.tenant_id, wallet_id, transaction_id, "refund", body
+        )
+
+    return idempotent_write(engine, request, principal, idempotency_key, body, work)
 
 
 @router.get("/{wallet_id}/statement", responses=problem_responses(400, 404, 422))
@@ -157,16 +163,6 @@ def statement(
     )
 
 
-def _stored(status_code: int, response: WalletResponse | MovementResponse) -> StoredResponse:
-    return StoredResponse(status_code, response.model_dump(mode="json"))
-
-
-def _replay(stored: StoredResponse) -> JSONResponse:
-    return JSONResponse(
-        stored.body, status_code=stored.status_code, headers={"Idempotent-Replayed": "true"}
-    )
-
-
 def _wallet_response(wallet_id: UUID, balance: Money) -> WalletResponse:
     return WalletResponse(
         id=wallet_id, currency=balance.currency, balance_minor=balance.amount_minor
@@ -174,10 +170,17 @@ def _wallet_response(wallet_id: UUID, balance: Money) -> WalletResponse:
 
 
 def _movement_response(
-    transaction_id: UUID, kind: str, body: MovementRequest, balance: Money
+    conn: Connection,
+    tenant_id: UUID,
+    wallet_id: UUID,
+    transaction_id: UUID,
+    kind: str,
+    body: MovementRequest,
 ) -> MovementResponse:
+    balance = ledger.get_balance(conn, tenant_id, wallet_id)
     return MovementResponse(
         transaction_id=transaction_id,
+        wallet_id=wallet_id,
         kind=kind,
         amount_minor=body.amount_minor,
         currency=body.currency,

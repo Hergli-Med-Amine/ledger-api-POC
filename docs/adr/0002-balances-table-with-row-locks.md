@@ -23,3 +23,11 @@ the same accounts cannot deadlock each other. The stored balance can be verified
 `fx_pool`) take part in every transaction in their currency. Locking a balance row for them
 would make every top-up or payment in that currency, across all tenants, wait for one row. They
 never need a funds check, so their balance is derived from `SUM(postings)` when needed.
+
+**Global lock order.** Every write takes its locks in this order, and never the other way round,
+so no two writes can each hold what the other waits for:
+1. the idempotency key (advisory lock),
+2. the row the operation is about: the original payment for a refund, the quote for a conversion,
+3. wallet balance rows, ascending by account id (a conversion locks two).
+
+Removing the payment lock let 44 concurrent refunds of 1 through on a payment of 30 (tested).

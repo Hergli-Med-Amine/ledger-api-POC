@@ -76,10 +76,26 @@ def ledger_violations(engine: Engine) -> Callable[[], list[str]]:
             negative = conn.execute(
                 text("SELECT account_id FROM balances WHERE amount_minor < 0")
             ).all()
+            over_refunded = conn.execute(
+                text("""
+                    WITH wallet_legs AS (
+                        SELECT t.id, t.kind, t.refund_of, p.amount_minor
+                        FROM transactions t
+                        JOIN postings p ON p.transaction_id = t.id
+                        JOIN accounts a ON a.id = p.account_id AND a.kind = 'wallet'
+                    )
+                    SELECT paid.id FROM wallet_legs paid
+                    JOIN wallet_legs refund ON refund.refund_of = paid.id
+                    WHERE paid.kind = 'payment'
+                    GROUP BY paid.id, paid.amount_minor
+                    HAVING SUM(refund.amount_minor) > -paid.amount_minor
+                """)
+            ).all()
         return (
             [f"unbalanced transaction {row}" for row in unbalanced]
             + [f"balance differs from postings {row}" for row in drifted]
             + [f"negative wallet {row}" for row in negative]
+            + [f"payment refunded beyond its amount {row}" for row in over_refunded]
         )
 
     return check

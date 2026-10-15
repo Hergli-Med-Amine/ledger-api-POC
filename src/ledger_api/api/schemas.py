@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from http import HTTPStatus
 from typing import Annotated, Any
 from uuid import UUID
@@ -38,6 +39,7 @@ class WalletListResponse(BaseModel):
 
 class MovementResponse(BaseModel):
     transaction_id: UUID
+    wallet_id: UUID
     kind: str
     amount_minor: int
     currency: str
@@ -76,3 +78,35 @@ def problem_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
         status: {"description": HTTPStatus(status).phrase, "content": content}
         for status in statuses
     }
+
+
+class QuoteRequest(StrictRequest):
+    from_currency: Currency
+    to_currency: Currency
+
+
+class QuoteResponse(BaseModel):
+    id: UUID
+    from_currency: str
+    to_currency: str
+    rate: Decimal = Field(
+        description="Units of to_currency per unit of from_currency, as a string."
+    )
+    expires_at: datetime
+
+
+class ConversionRequest(StrictRequest):
+    quote_id: UUID
+    sell_amount_minor: AmountMinor
+
+
+class ConversionResponse(BaseModel):
+    transaction_id: UUID
+    quote_id: UUID
+    rate: Decimal
+    from_wallet_id: UUID
+    sold_amount_minor: int
+    sold_currency: str
+    to_wallet_id: UUID
+    bought_amount_minor: int = Field(description="Rounded half-even to the minor unit.")
+    bought_currency: str

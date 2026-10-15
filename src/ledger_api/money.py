@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from typing import Final
 
 # ISO 4217 code -> minor-unit exponent: EUR 12.34 is 1234 minor units, JPY has none, KWD has 3.
@@ -26,3 +27,18 @@ class Money:
             raise TypeError(f"amount_minor must be int, got {type(self.amount_minor).__name__}")
         if self.currency not in CURRENCY_EXPONENTS:
             raise UnknownCurrency(self.currency)
+
+
+def convert(amount: Money, to_currency: str, rate: Decimal) -> Money:
+    """Converts at `rate` (units of to_currency per unit of amount.currency).
+
+    The result is rounded to the target's minor unit with ROUND_HALF_EVEN (banker's rounding):
+    ties go to the even neighbour, so across many conversions rounding has no upward bias.
+    """
+    if to_currency not in CURRENCY_EXPONENTS:
+        raise UnknownCurrency(to_currency)
+    shift = CURRENCY_EXPONENTS[to_currency] - CURRENCY_EXPONENTS[amount.currency]
+    # Enough precision that the product is exact before the one deliberate rounding below.
+    with localcontext(prec=60):
+        exact = Decimal(amount.amount_minor) * rate * Decimal(10) ** shift
+        return Money(int(exact.to_integral_value(rounding=ROUND_HALF_EVEN)), to_currency)

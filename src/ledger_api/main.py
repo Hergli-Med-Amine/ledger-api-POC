@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, Response
 from sqlalchemy import create_engine
 
 from ledger_api import log
-from ledger_api.api import errors, wallets
+from ledger_api.api import errors, fx, wallets
 
 logger = logging.getLogger("ledger_api.http")
 # A client's X-Request-Id is reused only if it is short and cannot break a log line.
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="ledger-api", version="0.1.0", lifespan=lifespan)
 errors.install(app)
 app.include_router(wallets.router)
+app.include_router(fx.router)
 
 
 @app.middleware("http")

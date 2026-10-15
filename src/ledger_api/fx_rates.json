@@ -1,0 +1,15 @@
+{
+  "_comment": "Static, fictional mid-market rates: units of the second currency per unit of the first.",
+  "EUR/USD": "1.0850",
+  "USD/EUR": "0.9217",
+  "EUR/GBP": "0.8420",
+  "GBP/EUR": "1.1876",
+  "USD/GBP": "0.7760",
+  "GBP/USD": "1.2886",
+  "EUR/JPY": "162.35",
+  "JPY/EUR": "0.006159",
+  "USD/JPY": "149.63",
+  "JPY/USD": "0.006683",
+  "EUR/KWD": "0.3335",
+  "KWD/EUR": "2.9985"
+}

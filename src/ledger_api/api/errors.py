@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from ledger_api import idempotency, ledger
+from ledger_api import fx, idempotency, ledger
 from ledger_api.api.auth import MissingScope, Unauthenticated
 from ledger_api.money import UnknownCurrency
 
@@ -22,6 +22,9 @@ PROBLEMS: dict[type[Exception], tuple[int, str, str]] = {
     Unauthenticated: (401, "unauthenticated", "Missing or invalid API key"),
     MissingScope: (403, "missing-scope", "API key lacks the required scope"),
     ledger.WalletNotFound: (404, "wallet-not-found", "Wallet not found"),
+    ledger.PaymentNotFound: (404, "payment-not-found", "Payment not found for this wallet"),
+    fx.QuoteNotFound: (404, "quote-not-found", "FX quote not found"),
+    fx.QuoteAlreadyUsed: (409, "quote-already-used", "FX quote was already used"),
     ledger.WalletAlreadyExists: (409, "wallet-exists", "Wallet already exists for this currency"),
     InvalidCursor: (400, "invalid-cursor", "Invalid pagination cursor"),
     idempotency.KeyInFlight: (
@@ -38,6 +41,10 @@ PROBLEMS: dict[type[Exception], tuple[int, str, str]] = {
     ledger.CurrencyMismatch: (422, "currency-mismatch", "Amount currency differs from wallet's"),
     ledger.NonPositiveAmount: (422, "non-positive-amount", "Amount must be positive"),
     ledger.InsufficientFunds: (422, "insufficient-funds", "Insufficient funds"),
+    ledger.RefundExceedsPayment: (422, "refund-exceeds-payment", "Refund exceeds what is left"),
+    ledger.ConversionRoundsToZero: (422, "conversion-too-small", "Converted amount rounds to 0"),
+    fx.QuoteExpired: (422, "quote-expired", "FX quote has expired"),
+    fx.UnsupportedCurrencyPair: (422, "unsupported-pair", "No rate for this currency pair"),
 }
 
 

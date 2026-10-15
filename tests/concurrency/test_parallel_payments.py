@@ -111,3 +111,56 @@ def test_parallel_payments_beyond_the_balance_never_overdraw(
     assert payment_count(db) == 33
     assert http.get(wallet_url, headers=headers).json()["balance_minor"] == 10
     assert ledger_violations() == []
+
+
+def test_parallel_partial_refunds_never_exceed_the_payment(
+    http: httpx2.Client,
+    setup_wallet: Callable[[int], tuple[str, dict[str, str]]],
+    ledger_violations: Callable[[], list[str]],
+) -> None:
+    wallet_url, headers = setup_wallet(100)
+    payment = http.post(
+        f"{wallet_url}/payments",
+        json={"amount_minor": 30, "currency": "EUR"},
+        headers={**headers, "Idempotency-Key": "pay"},
+    ).json()
+    refunds_url = f"{wallet_url}/payments/{payment['transaction_id']}/refunds"
+
+    responses = in_parallel(
+        lambda i: http.post(
+            refunds_url,
+            json={"amount_minor": 1, "currency": "EUR"},
+            headers={**headers, "Idempotency-Key": f"r{i}"},
+        )
+    )
+
+    assert Counter(r.status_code for r in responses) == {201: 30, 422: 20}
+    assert http.get(wallet_url, headers=headers).json()["balance_minor"] == 100
+    assert ledger_violations() == []
+
+
+def test_one_quote_fired_in_parallel_converts_once(
+    http: httpx2.Client,
+    setup_wallet: Callable[[int], tuple[str, dict[str, str]]],
+    ledger_violations: Callable[[], list[str]],
+) -> None:
+    wallet_url, headers = setup_wallet(100_00)
+    http.post("/v1/wallets", json={"currency": "USD"}, headers={**headers, "Idempotency-Key": "u"})
+    quote = http.post(
+        "/v1/fx/quotes",
+        json={"from_currency": "EUR", "to_currency": "USD"},
+        headers={**headers, "Idempotency-Key": "q"},
+    ).json()
+
+    # Distinct idempotency keys, so only the quote's own single-use rule stops the duplicates.
+    responses = in_parallel(
+        lambda i: http.post(
+            "/v1/fx/conversions",
+            json={"quote_id": quote["id"], "sell_amount_minor": 10_00},
+            headers={**headers, "Idempotency-Key": f"c{i}"},
+        )
+    )
+
+    assert Counter(r.status_code for r in responses) == {201: 1, 409: 49}
+    assert http.get(wallet_url, headers=headers).json()["balance_minor"] == 90_00
+    assert ledger_violations() == []
