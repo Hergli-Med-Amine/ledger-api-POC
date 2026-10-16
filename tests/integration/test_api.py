@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
 from ledger_api.api.auth import revoke_api_key
-from ledger_api.api.database import get_engine
+from ledger_api.api.state import get_engine
 from ledger_api.main import app
 
 Headers = dict[str, str]

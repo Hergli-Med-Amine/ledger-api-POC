@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import Connection, text
 
 from ledger_api import log
-from ledger_api.api.database import EngineDep
+from ledger_api.api.state import EngineDep, RateLimiterDep
 
 SCOPES = frozenset({"read", "write"})
 
@@ -27,6 +27,7 @@ class MissingScope(Exception):
 @dataclass(frozen=True, slots=True)
 class Principal:
     tenant_id: UUID
+    key_prefix: str
     scopes: frozenset[str]
 
 
@@ -69,7 +70,7 @@ def authenticate(conn: Connection, key: str) -> Principal:
     # Constant-time comparison, so response timing does not reveal how much of a guess matched.
     if row is None or not hmac.compare_digest(row.hash, _hash(key)):
         raise Unauthenticated
-    return Principal(row.tenant_id, frozenset(row.scopes))
+    return Principal(row.tenant_id, parts[1], frozenset(row.scopes))
 
 
 def _hash(key: str) -> bytes:
@@ -82,6 +83,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 def _current_principal(
     engine: EngineDep,
+    rate_limiter: RateLimiterDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> Principal:
     if credentials is None:
@@ -89,6 +91,8 @@ def _current_principal(
     with engine.connect() as conn:
         principal = authenticate(conn, credentials.credentials)
     log.set_tenant(principal.tenant_id)
+    if rate_limiter is not None:
+        rate_limiter.check(principal.key_prefix)
     return principal
 
 

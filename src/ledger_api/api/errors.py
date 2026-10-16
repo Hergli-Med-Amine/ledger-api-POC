@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException
 from ledger_api import fx, idempotency, ledger
 from ledger_api.api.auth import MissingScope, Unauthenticated
 from ledger_api.money import UnknownCurrency
+from ledger_api.ratelimit import RateLimited
 
 
 class InvalidCursor(Exception):
@@ -27,6 +28,7 @@ PROBLEMS: dict[type[Exception], tuple[int, str, str]] = {
     fx.QuoteAlreadyUsed: (409, "quote-already-used", "FX quote was already used"),
     ledger.WalletAlreadyExists: (409, "wallet-exists", "Wallet already exists for this currency"),
     InvalidCursor: (400, "invalid-cursor", "Invalid pagination cursor"),
+    RateLimited: (429, "rate-limited", "Too many requests for this API key"),
     idempotency.KeyInFlight: (
         409,
         "idempotency-key-in-flight",
@@ -76,7 +78,11 @@ def install(app: FastAPI) -> None:
 
 async def _domain_error(request: Request, exc: Exception) -> JSONResponse:
     status, slug, title = PROBLEMS[type(exc)]
-    headers = {"WWW-Authenticate": "Bearer"} if status == 401 else None
+    headers = None
+    if isinstance(exc, Unauthenticated):
+        headers = {"WWW-Authenticate": "Bearer"}
+    elif isinstance(exc, RateLimited):
+        headers = {"Retry-After": str(exc.retry_after_seconds)}
     return problem(status, title, f"/problems/{slug}", str(exc) or None, headers)
 
 

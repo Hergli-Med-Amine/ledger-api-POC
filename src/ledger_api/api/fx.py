@@ -4,7 +4,6 @@ from sqlalchemy import Connection
 
 from ledger_api import fx, ledger
 from ledger_api.api.auth import Writer
-from ledger_api.api.database import EngineDep
 from ledger_api.api.schemas import (
     ConversionRequest,
     ConversionResponse,
@@ -12,9 +11,10 @@ from ledger_api.api.schemas import (
     QuoteResponse,
     problem_responses,
 )
+from ledger_api.api.state import EngineDep
 from ledger_api.api.writes import IdempotencyKey, idempotent_write
 
-router = APIRouter(prefix="/v1/fx", tags=["fx"], responses=problem_responses(401, 403))
+router = APIRouter(prefix="/v1/fx", tags=["fx"], responses=problem_responses(401, 403, 429))
 
 
 @router.post(
