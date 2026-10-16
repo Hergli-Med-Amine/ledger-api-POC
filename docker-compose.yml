@@ -38,6 +38,9 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://ledger:ledger@postgres:5432/ledger
+      REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_PER_SECOND: "5"
+      RATE_LIMIT_BURST: "10"
     ports:
       - "8000:8000"
     depends_on:

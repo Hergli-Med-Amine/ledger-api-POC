@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from tests.conftest import Receiver
 
 
-def start_worker(db: Engine) -> subprocess.Popen[bytes]:
+def start_worker(db: Engine, *args: str) -> subprocess.Popen[bytes]:
     """The real worker, as its own process, so it can be killed like a crashing container."""
     env = {
         **os.environ,
@@ -24,7 +24,7 @@ def start_worker(db: Engine) -> subprocess.Popen[bytes]:
         "WORKER_POLL_SECONDS": "0.1",
     }
     return subprocess.Popen(
-        [sys.executable, "-m", "ledger_api.worker"],
+        [sys.executable, "-m", "ledger_api.worker", *args],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -73,3 +73,17 @@ def test_event_survives_the_worker_being_killed_mid_delivery(
     assert len(event_ids) == 1
     for headers, body in receiver.requests:
         assert outbox.verify_signature(secret, headers["Ledger-Signature"], body, int(time.time()))
+
+
+def test_drain_mode_delivers_what_is_due_and_exits(
+    db: Engine, webhook_tenant: tuple[UUID, str], receiver: Receiver
+) -> None:
+    tenant_id, _ = webhook_tenant
+    with db.begin() as conn:
+        wallet = ledger.open_wallet(conn, tenant_id, "EUR")
+        ledger.top_up(conn, tenant_id, wallet, Money(10_00, "EUR"))
+
+    assert start_worker(db, "--drain").wait(timeout=15) == 0
+
+    assert sent_at(db) is not None
+    assert len(receiver.requests) == 1

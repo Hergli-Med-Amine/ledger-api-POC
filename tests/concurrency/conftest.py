@@ -7,7 +7,7 @@ import pytest
 import uvicorn
 from sqlalchemy import Engine
 
-from ledger_api.api.database import get_engine
+from ledger_api.api.state import get_engine, get_rate_limiter
 from ledger_api.main import app
 
 
@@ -15,6 +15,7 @@ from ledger_api.main import app
 def server_url(db: Engine) -> Iterator[str]:
     """A real uvicorn server, so requests run concurrently in its thread pool."""
     app.dependency_overrides[get_engine] = lambda: db
+    app.dependency_overrides[get_rate_limiter] = lambda: None
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     server = uvicorn.Server(uvicorn.Config(app, lifespan="off", log_level="warning"))

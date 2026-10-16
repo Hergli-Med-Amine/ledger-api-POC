@@ -1,12 +1,14 @@
 name: CI
 
 # docs/openapi.json is not ignored: a test checks it against the code.
+# main is covered by CD, which runs this workflow before deploying.
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
     paths-ignore: ["**.md", "docs/adr/**"]
   pull_request:
     paths-ignore: ["**.md", "docs/adr/**"]
+  workflow_call:
 
 permissions:
   contents: read
@@ -32,3 +34,13 @@ jobs:
       - run: curl --fail --retry 30 --retry-delay 1 --retry-all-errors http://localhost:8000/health
       - if: failure()
         run: docker compose logs
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: fmt and validate
+        run: |
+          docker run --rm -v "$PWD/infra/terraform:/tf" -w /tf hashicorp/terraform:1.16.6 fmt -check
+          docker run --rm -v "$PWD/infra/terraform:/tf" -w /tf --entrypoint sh hashicorp/terraform:1.16.6 \
+            -c "terraform init -backend=false -input=false && terraform validate"

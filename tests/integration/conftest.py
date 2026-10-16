@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Request
 from sqlalchemy import Engine
 
-from ledger_api.api.database import get_engine
+from ledger_api.api.state import get_engine, get_rate_limiter
 from ledger_api.main import app
 
 
@@ -19,6 +19,7 @@ def client(db: Engine) -> Iterator[TestClient]:
             request.headers["Idempotency-Key"] = str(uuid4())
 
     app.dependency_overrides[get_engine] = lambda: db
+    app.dependency_overrides[get_rate_limiter] = lambda: None
     client = TestClient(app)
     client.event_hooks = {"request": [add_idempotency_key], "response": []}
     yield client

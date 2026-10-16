@@ -9,7 +9,6 @@ from sqlalchemy import Connection
 
 from ledger_api import ledger
 from ledger_api.api.auth import Reader, Writer
-from ledger_api.api.database import EngineDep
 from ledger_api.api.errors import InvalidCursor
 from ledger_api.api.schemas import (
     MovementRequest,
@@ -21,10 +20,13 @@ from ledger_api.api.schemas import (
     WalletResponse,
     problem_responses,
 )
+from ledger_api.api.state import EngineDep
 from ledger_api.api.writes import IdempotencyKey, idempotent_write
 from ledger_api.money import Money
 
-router = APIRouter(prefix="/v1/wallets", tags=["wallets"], responses=problem_responses(401, 403))
+router = APIRouter(
+    prefix="/v1/wallets", tags=["wallets"], responses=problem_responses(401, 403, 429)
+)
 
 
 @router.post(
