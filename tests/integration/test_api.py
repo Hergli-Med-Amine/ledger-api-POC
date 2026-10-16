@@ -48,9 +48,6 @@ def assert_problem(response: Any, status: int, type_: str) -> None:
     assert response.json()["status"] == status
 
 
-# --- one end-to-end test per endpoint ---
-
-
 def test_open_wallet(client: TestClient, headers: Headers) -> None:
     response = client.post("/v1/wallets", json={"currency": "EUR"}, headers=headers)
 
@@ -129,9 +126,6 @@ def test_statement_pages_newest_first(client: TestClient, headers: Headers, wall
     assert_problem(bad, 400, "/problems/invalid-cursor")
 
 
-# --- authentication and tenancy ---
-
-
 def test_requests_without_a_valid_key_are_rejected(
     client: TestClient, wallet_id: str, headers: Headers
 ) -> None:
@@ -191,9 +185,6 @@ def test_tenant_cannot_see_or_use_another_tenants_wallet(
         assert_problem(response, 404, "/problems/wallet-not-found")
     assert client.get("/v1/wallets", headers=other).json() == {"data": []}
     assert client.get(f"/v1/wallets/{wallet_id}", headers=headers).json()["balance_minor"] == 10_00
-
-
-# --- request validation ---
 
 
 @pytest.mark.parametrize(

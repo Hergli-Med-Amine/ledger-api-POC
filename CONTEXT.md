@@ -44,6 +44,9 @@ Scoped to the tenant. The first request with a key does the work; a retry with t
 same body gets the stored response back instead of moving money twice. A request that failed
 moved no money and is not recorded, so retrying it runs it again.
 
+**Webhook** — a signed HTTP POST to a tenant's URL announcing one committed transaction. Delivered
+at least once; `Ledger-Event-Id` is the same on every retry, so the receiver can dedupe.
+
 **Outbox** — a table of events written in the same transaction as the money movement they
 describe. A separate worker reads it and delivers signed webhooks, so an event exists if and only
 if the movement committed.

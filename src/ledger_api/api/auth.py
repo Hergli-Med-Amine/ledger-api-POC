@@ -73,8 +73,7 @@ def authenticate(conn: Connection, key: str) -> Principal:
 
 
 def _hash(key: str) -> bytes:
-    # A fast hash is enough: keys carry 256 random bits, so they cannot be guessed offline.
-    # Slow hashes (bcrypt, argon2) exist to protect low-entropy human passwords.
+    # Fast hash suffices for 256 random bits; slow hashes exist for guessable passwords.
     return hashlib.sha256(key.encode()).digest()
 
 

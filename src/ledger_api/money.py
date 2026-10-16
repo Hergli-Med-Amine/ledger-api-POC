@@ -30,15 +30,11 @@ class Money:
 
 
 def convert(amount: Money, to_currency: str, rate: Decimal) -> Money:
-    """Converts at `rate` (units of to_currency per unit of amount.currency).
-
-    The result is rounded to the target's minor unit with ROUND_HALF_EVEN (banker's rounding):
-    ties go to the even neighbour, so across many conversions rounding has no upward bias.
-    """
+    """Converts at `rate` (to_currency per unit of amount.currency), rounding half-even."""
     if to_currency not in CURRENCY_EXPONENTS:
         raise UnknownCurrency(to_currency)
     shift = CURRENCY_EXPONENTS[to_currency] - CURRENCY_EXPONENTS[amount.currency]
-    # Enough precision that the product is exact before the one deliberate rounding below.
+    # 60 digits keep the product exact; ties then go to the even neighbour, avoiding bias.
     with localcontext(prec=60):
         exact = Decimal(amount.amount_minor) * rate * Decimal(10) ** shift
         return Money(int(exact.to_integral_value(rounding=ROUND_HALF_EVEN)), to_currency)
