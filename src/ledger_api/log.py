@@ -8,9 +8,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-# One mutable dict per request, not one ContextVar per field: FastAPI runs sync dependencies in
-# worker threads on a copy of the context, so a ContextVar.set() there (where the tenant becomes
-# known) would be lost, while a change to this shared dict is seen by the whole request.
+# A shared dict, not a ContextVar per field: sync dependencies run on a copy of the context,
+# so a .set() made there (where the tenant becomes known) would be lost.
 _request_context: ContextVar[dict[str, str] | None] = ContextVar("request_context", default=None)
 
 
@@ -46,7 +45,7 @@ class JsonFormatter(logging.Formatter):
 def configure(level: int = logging.INFO) -> None:
     base_factory = logging.getLogRecordFactory()
 
-    # Captured when the record is created, i.e. still inside the request that logged it.
+    # Captured at creation, while still inside the request that logged it.
     def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
         record = base_factory(*args, **kwargs)
         record.context = dict(_request_context.get() or {})

@@ -22,8 +22,7 @@ def idempotent_write[R: BaseModel](
     body: BaseModel,
     work: Callable[[Connection], R],
 ) -> R | JSONResponse:
-    """Every POST goes through here: one database transaction holds the idempotency key, the
-    work (money movement) and the stored response, so they commit together or not at all."""
+    """One transaction holds the idempotency key, the work and its stored response (ADR 3)."""
     request_hash = idempotency.fingerprint(
         request.method, request.url.path, body.model_dump(mode="json")
     )

@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import Connection, text
 
-from ledger_api import fx
+from ledger_api import fx, outbox
 from ledger_api.money import CURRENCY_EXPONENTS, Money, UnknownCurrency, convert
 
 # Every function here runs inside the caller's database transaction and never commits:
@@ -129,8 +129,7 @@ def statement(
 ) -> list[StatementLine]:
     """Newest first. Pass the last line's posting_id as `before` to get the next page."""
     get_balance(conn, tenant_id, wallet_id)  # raises WalletNotFound for another tenant's wallet
-    # Keyset pagination on the time-ordered UUIDv7 id: unlike OFFSET, rows inserted while a
-    # client pages through do not shift later pages, and each page is one index range scan.
+    # Keyset pagination: unlike OFFSET, rows added while a client pages do not shift its pages.
     rows = conn.execute(
         text("""
             SELECT p.id, p.transaction_id, t.kind, p.amount_minor, p.currency,
@@ -209,8 +208,7 @@ def refund(
     reference: str | None = None,
 ) -> UUID:
     _require_positive(amount)
-    # Locking the payment serialises its refunds, so two concurrent partial refunds cannot
-    # both see the same "remaining" amount and together exceed the payment.
+    # Locking the payment serialises its refunds, so together they cannot exceed it.
     paid = conn.execute(
         text("""
             SELECT -p.amount_minor AS amount_minor, p.currency
@@ -254,8 +252,7 @@ def refund(
 def convert_currency(
     conn: Connection, tenant_id: UUID, quote_id: UUID, sell_amount_minor: int
 ) -> Conversion:
-    """Sells sell_amount_minor of the quote's from-currency for its to-currency, between the
-    tenant's two wallets in those currencies, at the quoted rate."""
+    """Moves money between the tenant's wallets in the quote's two currencies."""
     quote = fx.use_quote(conn, tenant_id, quote_id)
     sold = Money(sell_amount_minor, quote.from_currency)
     _require_positive(sold)
@@ -269,9 +266,7 @@ def convert_currency(
         raise InsufficientFunds(
             f"balance is {balances[from_wallet].amount_minor}, conversion needs {sold.amount_minor}"
         )
-    # fx_pool is the counterparty in both currencies, so each currency balances on its own.
-    # The pool pays out the rounded amount, so the sub-minor-unit rounding residue stays with
-    # it; half-even rounding keeps that residue unbiased over many conversions.
+    # fx_pool pays out the rounded amount, so the rounding residue stays with it (ADR 1).
     pool_from = _platform_account(conn, "fx_pool", sold.currency)
     pool_to = _platform_account(conn, "fx_pool", bought.currency)
     transaction_id = _post(
@@ -304,8 +299,7 @@ def _lock_wallet(conn: Connection, tenant_id: UUID, wallet_id: UUID, currency: s
 
 
 def _lock_wallets(conn: Connection, tenant_id: UUID, wallet_ids: list[UUID]) -> dict[UUID, Money]:
-    # Always ascending id order (rows are locked as the sorted result is read), so two
-    # transactions locking the same wallets queue behind each other instead of deadlocking.
+    # Ascending id order, so two transactions locking the same wallets cannot deadlock.
     rows = conn.execute(
         text("""
             SELECT b.account_id, b.amount_minor, a.currency
@@ -369,11 +363,11 @@ def _post(
     if any(totals.values()):
         raise ValueError(f"unbalanced legs: {dict(totals)}")
 
-    transaction_id: UUID = conn.execute(
+    transaction = conn.execute(
         text("""
             INSERT INTO transactions (tenant_id, kind, reference, refund_of, quote_id)
             VALUES (:tenant_id, :kind, :reference, :refund_of, :quote_id)
-            RETURNING id
+            RETURNING id, created_at
         """),
         {
             "tenant_id": tenant_id,
@@ -382,7 +376,8 @@ def _post(
             "refund_of": refund_of,
             "quote_id": quote_id,
         },
-    ).scalar_one()
+    ).one()
+    transaction_id: UUID = transaction.id
     conn.execute(
         text("""
             INSERT INTO postings (transaction_id, account_id, amount_minor, currency)
@@ -397,6 +392,35 @@ def _post(
             }
             for account_id, money in legs
         ],
+    )
+    wallet_ids = set(
+        conn.execute(
+            text("SELECT id FROM accounts WHERE id = ANY(:ids) AND kind = 'wallet'"),
+            {"ids": [account_id for account_id, _ in legs]},
+        ).scalars()
+    )
+    # Written in this same transaction: the event exists if and only if the money moved.
+    outbox.enqueue(
+        conn,
+        tenant_id,
+        f"{kind}.created",
+        {
+            "transaction_id": str(transaction_id),
+            "kind": kind,
+            "reference": reference,
+            "refund_of": str(refund_of) if refund_of else None,
+            "quote_id": str(quote_id) if quote_id else None,
+            "created_at": transaction.created_at.isoformat(),
+            "wallets": [
+                {
+                    "wallet_id": str(account_id),
+                    "amount_minor": m.amount_minor,
+                    "currency": m.currency,
+                }
+                for account_id, m in legs
+                if account_id in wallet_ids
+            ],
+        },
     )
     return transaction_id
 

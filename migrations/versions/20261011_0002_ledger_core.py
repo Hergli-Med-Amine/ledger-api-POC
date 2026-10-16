@@ -66,8 +66,7 @@ def upgrade() -> None:
         )
     """)
 
-    # Runs at COMMIT, after all of a transaction's postings exist, so a half-written
-    # or unbalanced transaction can never be committed whatever the application does.
+    # Checked at COMMIT, once all postings exist: no unbalanced transaction can commit.
     op.execute("""
         CREATE FUNCTION postings_check_balanced() RETURNS trigger
         LANGUAGE plpgsql AS $$

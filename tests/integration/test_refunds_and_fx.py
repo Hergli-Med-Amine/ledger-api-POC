@@ -29,9 +29,6 @@ def balance(db: Engine, tenant: UUID, wallet_id: UUID) -> int:
         return ledger.get_balance(conn, tenant, wallet_id).amount_minor
 
 
-# --- refunds ---
-
-
 @pytest.fixture
 def payment(db: Engine, tenant: UUID, wallets: dict[str, UUID]) -> UUID:
     with db.begin() as conn:
@@ -79,9 +76,6 @@ def test_only_payments_of_this_tenant_and_wallet_can_be_refunded(
         refund(db, intruder, wallets["EUR"], payment, 1_00)
     with pytest.raises(ledger.PaymentNotFound):
         refund(db, tenant, wallets["JPY"], payment, 1_00)
-
-
-# --- FX ---
 
 
 def quote(db: Engine, tenant: UUID, from_currency: str, to_currency: str) -> fx.Quote:

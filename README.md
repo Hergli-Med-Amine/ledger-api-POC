@@ -3,7 +3,7 @@
 A multi-currency wallet and double-entry ledger service for B2B commerce: top-ups, invoice
 payments, refunds and FX conversion, with idempotent writes and signed webhooks.
 
-Work in progress — currently at milestone 5 (refunds and FX).
+Work in progress — currently at milestone 6 (outbox and webhooks).
 
 ## Run locally
 
@@ -15,12 +15,20 @@ curl http://localhost:8000/health
 ```
 
 `docker compose up` starts PostgreSQL and Redis, runs Alembic migrations once, then starts the API
-on port 8000.
+on port 8000, the outbox worker, and a stand-in webhook receiver on port 9000.
 
 Create a tenant and its first API key (the key is printed once):
 
 ```sh
 docker compose run --rm migrate python -m ledger_api.admin create-tenant "Acme Distribution"
+```
+
+To receive webhooks, point the tenant at the stand-in receiver (its secret is fixed in
+`docker-compose.yml`), then watch `docker compose logs -f webhook-receiver`:
+
+```sh
+docker compose run --rm migrate python -m ledger_api.admin set-webhook "$TENANT_ID" \
+  http://webhook-receiver:9000/ --secret whsec_local_demo
 ```
 
 Then, with `KEY` set to that key:
@@ -60,6 +68,9 @@ Every `POST` requires an `Idempotency-Key` header (any printable ASCII, up to 25
 Retrying with the same key and body returns the original response with
 `Idempotent-Replayed: true` and moves no money; the same key with a different body is `422`; while
 the first request is still running, `409` ([ADR 3](docs/adr/0003-idempotency-in-postgres.md)).
+Every money movement emits a signed webhook (`top_up.created`, `payment.created`,
+`refund.created`, `conversion.created`), delivered at least once by the outbox worker; dedupe on
+`Ledger-Event-Id`. How to verify the signature: [ADR 5](docs/adr/0005-webhook-signing.md).
 Every response carries an `X-Request-Id`, also found on every log line for that request.
 
 Amounts are integers in the currency's minor unit (`1250` EUR is €12.50). Errors are
@@ -85,6 +96,10 @@ uv run pytest
 - A payment's `reference` (e.g. an invoice number) is not unique: a client that retries with a
   *new* idempotency key can pay the same invoice twice. A unique index on
   `(tenant_id, reference)` for payments would catch that server-side.
+- Webhook secrets are stored in plain text (they must be readable to sign); a production system
+  would encrypt them with a key from a secret manager.
+- Dead webhook events (10 failed attempts) are kept but there is no command to re-send them.
+- Retry delays have no random jitter, so many events failing together retry together.
 - Idempotency keys are kept forever; a production system would expire them (e.g. after 24 h).
 
 - Statements are ordered by posting id (UUIDv7, time of creation), not commit time. A transaction

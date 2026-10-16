@@ -9,9 +9,7 @@ from sqlalchemy import Engine
 from ledger_api import fx, ledger
 from ledger_api.money import Money, convert
 
-# Two tenants and two currencies, so platform accounts are shared across tenants
-# and a currency with no minor unit (JPY) is exercised. Conversions run between
-# tenant-a's EUR and JPY wallets.
+# Two tenants share platform accounts; JPY has no minor unit. Conversions use tenant-a's wallets.
 WALLETS = [("tenant-a", "EUR"), ("tenant-a", "JPY"), ("tenant-b", "EUR")]
 EUR_A, JPY_A = 0, 1
 STARTING_BALANCE = 20_000
@@ -54,8 +52,7 @@ def test_random_operations_keep_the_ledger_consistent(
             (tenants[name], ledger.open_wallet(conn, tenants[name], currency), currency)
             for name, currency in WALLETS
         ]
-        # Funded up front so payments mostly succeed and refunds have payments to work on;
-        # "pay_all" still drives wallets to exactly zero.
+        # Funded so payments mostly succeed and refunds have payments; "pay_all" still hits zero.
         for tenant_id, wallet_id, currency in wallets:
             ledger.top_up(conn, tenant_id, wallet_id, Money(STARTING_BALANCE, currency))
     # A simple model of what every balance should be, checked against the database at the end.

@@ -1,10 +1,4 @@
-"""Idempotency-Key handling, inside the same database transaction as the write it protects.
-
-Usage, within one transaction:
-    stored = begin(conn, tenant_id, key, fingerprint)
-    if stored: replay it
-    else: do the write, then record(...) the response before commit
-"""
+"""Idempotency-Key handling, inside the same database transaction as the write it protects."""
 
 import hashlib
 import json
@@ -38,20 +32,15 @@ def fingerprint(method: str, path: str, body: dict[str, Any]) -> bytes:
 def begin(
     conn: Connection, tenant_id: UUID, key: str, request_hash: bytes
 ) -> StoredResponse | None:
-    """Returns the response to replay, or None if the caller should do the work.
-
-    Raises KeyInFlight while another transaction holds the same key, and KeyReused if the key
-    was already used for a different request.
-    """
-    # The lock is the "in flight" marker. It is released at commit or rollback, so a crashed
-    # request never leaves a key stuck; there is no status column to clean up.
+    """Returns the stored response to replay, or None if the caller should do the work."""
+    # The lock marks the key in flight; it is released at commit or rollback, even on a crash.
     locked = conn.execute(
         text("SELECT pg_try_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
         {"lock_key": f"{tenant_id}:{key}"},
     ).scalar_one()
     if not locked:
         raise KeyInFlight(key)
-    # Safe to read then insert later: no other transaction can hold this key's lock meanwhile.
+    # Read now, insert later: safe, because no other transaction can hold this key's lock.
     row = conn.execute(
         text("""
             SELECT request_hash, response_code, response_body FROM idempotency_keys

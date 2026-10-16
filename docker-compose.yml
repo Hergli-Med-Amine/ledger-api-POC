@@ -46,5 +46,23 @@ services:
       redis:
         condition: service_healthy
 
+  worker:
+    build: .
+    command: ["python", "-m", "ledger_api.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://ledger:ledger@postgres:5432/ledger
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Stands in for a tenant's endpoint and checks every signature. Local-only demo secret.
+  webhook-receiver:
+    build: .
+    command: ["python", "-m", "ledger_api.webhook_receiver"]
+    environment:
+      WEBHOOK_SECRET: whsec_local_demo
+    ports:
+      - "9000:9000"
+
 volumes:
   pgdata:
